@@ -79,3 +79,58 @@ When your code will be test, we will execute:
 ## Checkpoints
 Push the minimal amount of models in the folder *checkpoints*.
 
+
+---
+
+## Experiments (group 34)
+
+The generator architecture (`Generator` in `model.py`) is unchanged. We study one
+training intervention and one inference intervention, at a fixed budget of 100 epochs.
+
+| Lever | Method | Where |
+|---|---|---|
+| Training | Spectral normalisation of the discriminator (`--spectral_norm`) | `model.py`, `train.py` |
+| Training (ablation) | TTUR: `--lr_g 1e-4 --lr_d 4e-4` | `train.py` |
+| Inference | Discriminator Rejection Sampling (DRS) | `sampling.py` |
+| Inference (comparison) | OBRS at the same budget K, latent truncation | `sampling.py` |
+| Inference (ablation) | D recalibrated for the frozen G | `experiments/calibrate_D.py` |
+
+### Code layout
+
+```
+model.py            Generator (fixed) + Discriminator (optional spectral norm, logits())
+utils.py            training steps, seeds, saving / loading
+train.py            training; --run_dir runs/<name> saves config, log.csv, checkpoints, grids
+sampling.py         vanilla / truncation / DRS / OBRS samplers
+generate.py         platform contract: 10 000 PNGs in samples/ from checkpoints/
+evaluation/         MNIST feature extractor, FID, precision, recall (k-NN, k = 3)
+experiments/        eval_training.py, eval_sampling.py, calibrate_D.py, make_figures.py
+scripts/            launch_training.sh, launch_eval.sh (SLURM, MesoNet)
+```
+
+### Reproduce (from the repository root, on Juliet)
+
+```bash
+./scripts/launch_training.sh                 # baseline + sn, seeds 0 1 2 (6 jobs, ~20 min each)
+CONFIGS="ttur sn_ttur" ./scripts/launch_training.sh   # optional TTUR ablation
+./scripts/launch_eval.sh all                 # metrics of all checkpoints + sampling comparison
+python experiments/make_figures.py           # figures/ and results/summary.md
+```
+
+### Evaluation protocol
+
+- 10 000 generated images vs the 10 000 MNIST test images, quantised to 8 bits like PNG files.
+- Features: 128-d penultimate layer of a CNN trained on MNIST (`evaluation/metrics.py`).
+  Values are not comparable with the course platform, only between our runs.
+- Precision / recall: k-NN estimator of Kynkäänniemi et al. (2019), k = 3.
+- Same latent seed for every evaluation, 3 training seeds per configuration (mean ± std).
+- Rejection samplers: budget K = average number of candidates per kept image; DRS and
+  OBRS are calibrated to the same acceptance rate 1/K on 10 000 calibration samples.
+  We report acceptance rate and total generation time (calibration included).
+
+### Submission
+
+`generate.py` reads the sampling method from `checkpoints/config.json`, e.g.
+`"sampling": {"method": "drs", "K": 5}`. To submit a run, copy its
+`runs/<name>/checkpoints/{G.pth,D.pth,config.json}` into `checkpoints/`
+and add the `"sampling"` entry.

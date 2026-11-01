@@ -5,3 +5,5 @@ tqdm
 torch
 torchvision
 pillow
+pandas
+matplotlib
