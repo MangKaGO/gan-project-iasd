@@ -1,0 +1,16 @@
+{
+  "epochs": 500,
+  "lr": 0.0002,
+  "lr_g": 0.0002,
+  "lr_d": 0.0002,
+  "batch_size": 64,
+  "gpus": 1,
+  "spectral_norm": true,
+  "loss": "hinge",
+  "beta1": 0.5,
+  "beta2": 0.999,
+  "n_dis": 5,
+  "seed": 1,
+  "run_dir": "runs/sn_paper_ndis5_seed1",
+  "save_every": 50
+}
