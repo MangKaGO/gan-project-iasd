@@ -39,6 +39,9 @@ def main():
                         help="Default: results/<features>/sampling_metrics.csv")
     parser.add_argument("--n", type=int, default=10000)
     parser.add_argument("--eval_seed", type=int, default=0)
+    parser.add_argument("--samplers", nargs="*",
+                        default=["vanilla", "vanilla_rescale", "truncation", "drs", "obrs"],
+                        help="Which samplers to evaluate.")
     args = parser.parse_args()
     args.out = args.out or os.path.join("results", args.features, "sampling_metrics.csv")
 
@@ -61,6 +64,7 @@ def main():
             if os.path.exists(os.path.join(ckpt, d_file)):
                 jobs += [(m, d_file, K, None, False) for m in ("drs", "obrs") for K in args.Ks]
 
+        jobs = [j for j in jobs if j[0] in args.samplers]
         for sampler, d_file, K, psi, rescale in jobs:
             d_variant = {None: "none", "D.pth": "final", "D_calibrated.pth": "calibrated"}[d_file]
             key = (info["run"], sampler, d_variant, float(K), "" if psi is None else str(psi))

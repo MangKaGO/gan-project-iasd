@@ -23,9 +23,21 @@ def run_label(config):
     return "ttur" if ttur else "baseline"
 
 
+def is_finished(run_dir):
+    """A run is finished when the checkpoint of its last epoch exists."""
+    epochs = load_config(run_dir).get("epochs")
+    return epochs is not None and os.path.exists(
+        os.path.join(run_dir, "checkpoints", f"G_epoch{epochs:03d}.pth"))
+
+
 def list_runs(runs_dir):
-    """All run folders (those containing a config.json), sorted."""
-    return sorted(os.path.dirname(p) for p in glob.glob(os.path.join(runs_dir, "*", "config.json")))
+    """FINISHED run folders, sorted. Runs still training are skipped, so that a
+    half-trained model is never evaluated as if it were final."""
+    runs = sorted(os.path.dirname(p) for p in glob.glob(os.path.join(runs_dir, "*", "config.json")))
+    for r in runs:
+        if not is_finished(r):
+            print(f"Skipping {r}: training not finished.")
+    return [r for r in runs if is_finished(r)]
 
 
 def read_rows(path):

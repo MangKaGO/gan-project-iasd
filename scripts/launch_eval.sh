@@ -8,6 +8,9 @@
 #     GPU=0 ./scripts/launch_eval.sh all    # CPU only: slower, but no wait for a GPU
 #     FEATURES=mnist ./scripts/launch_eval.sh all   # cheap MNIST-CNN metrics instead of
 #                                                    # the platform ones (Inception / VGG-16)
+#     QUICK=1 ./scripts/launch_eval.sh all  # reduced plan (~40 min on GPU): epochs 50 and 100,
+#                                           # sampling on baseline and sn_ttur only, DRS and
+#                                           # truncation, K in {2, 5, 10}
 # Results are appended to results/*.csv; finished evaluations are skipped.
 
 STAGE=${1:-all}
@@ -26,14 +29,19 @@ else
   # Inception + VGG-16 on 10 000 images: ~30 s per evaluation, ~200 evaluations.
   if [ "${FEATURES}" = "platform" ]; then TIME=${TIME:-"05:00:00"}; else TIME=${TIME:-"01:30:00"}; fi
 fi
+if [ "${QUICK:-0}" = "1" ]; then
+  TRAIN_OPTS="--every 50"
+  SAMPLE_OPTS="--configs baseline sn_ttur --samplers vanilla truncation drs --Ks 2 5 10 --psis 1.5 1.0 0.5"
+  TIME="02:00:00"
+fi
 project_dir="$(pwd)"
 mkdir -p "${project_dir}/outputs" "${project_dir}/results"
 
 case ${STAGE} in
-  training)  cmd="python experiments/eval_training.py --features ${FEATURES}" ;;
+  training)  cmd="python experiments/eval_training.py --features ${FEATURES} ${TRAIN_OPTS}" ;;
   calibrate) cmd="for r in runs/*/; do python experiments/calibrate_D.py --run_dir \$r; done" ;;
-  sampling)  cmd="python experiments/eval_sampling.py --features ${FEATURES}" ;;
-  all)       cmd="python experiments/eval_training.py --features ${FEATURES} && for r in runs/*/; do python experiments/calibrate_D.py --run_dir \$r; done && python experiments/eval_sampling.py --features ${FEATURES}" ;;
+  sampling)  cmd="python experiments/eval_sampling.py --features ${FEATURES} ${SAMPLE_OPTS}" ;;
+  all)       cmd="python experiments/eval_training.py --features ${FEATURES} ${TRAIN_OPTS} && for r in runs/*/; do python experiments/calibrate_D.py --run_dir \$r; done && python experiments/eval_sampling.py --features ${FEATURES} ${SAMPLE_OPTS}" ;;
   *) echo "Usage: $0 [training|calibrate|sampling|all]"; exit 1 ;;
 esac
 

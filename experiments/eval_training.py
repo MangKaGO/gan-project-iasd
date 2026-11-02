@@ -30,6 +30,8 @@ def main():
                         help="Default: results/<features>/training_metrics.csv")
     parser.add_argument("--n", type=int, default=10000, help="Number of generated images.")
     parser.add_argument("--eval_seed", type=int, default=0, help="Seed of the latent samples.")
+    parser.add_argument("--every", type=int, default=1,
+                        help="Only evaluate epochs that are multiples of this (e.g. 50: epochs 50 and 100).")
     args = parser.parse_args()
     args.out = args.out or os.path.join("results", args.features, "training_metrics.csv")
 
@@ -42,7 +44,7 @@ def main():
         ckpts = sorted(glob.glob(os.path.join(run_dir, "checkpoints", "G_epoch*.pth")))
         for path in ckpts:
             epoch = int(re.search(r"epoch(\d+)", path).group(1))
-            if (info["run"], epoch) in done:
+            if (info["run"], epoch) in done or epoch % args.every:
                 continue
             G = load_generator(os.path.dirname(path), device, os.path.basename(path))
             set_seed(args.eval_seed)

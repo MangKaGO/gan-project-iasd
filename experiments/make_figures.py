@@ -209,7 +209,7 @@ def fig_training_dynamics(logs, collapsed, out):
 
 def table_training(df, logs, collapsed, path):
     last = df[df.epoch == df.epoch.max()]
-    cols = [c for c in ["fid", "precision", "recall", "density", "coverage", "class_entropy"] if c in df]
+    cols = ["fid", "precision", "recall"]   # the metrics of the course platform
     out = []
     for title, d in (("converged runs only", last[~last.run.isin(collapsed)]), ("all runs", last)):
         if title == "all runs" and not collapsed:
@@ -336,7 +336,7 @@ def fig_pr_plane(df, cfg, out):
 
 
 def table_sampling(df, path):
-    cols = [c for c in ["fid", "precision", "recall", "density", "coverage"] if c in df]
+    cols = ["fid", "precision", "recall"]   # the metrics of the course platform
     stats = mean_std(df, ["config", "sampler", "D_variant", "K", "psi"], cols + ["acceptance_rate", "time_s"])
     lines = ["## Inference lever, converged runs only (final checkpoints, mean ± std over seeds)", "",
              "| Generator | Sampler | D | K | ψ | " + " | ".join(HEAD[c] for c in cols) + " | Acceptance | Time (s) |",
