@@ -8,6 +8,8 @@ New options used by the experiments:
     --seed 0                 fix all random generators
     --spectral_norm          spectral normalisation on D (method 1)
     --lr_d / --lr_g          separate learning rates (TTUR ablation)
+    --n_dis 5                5 updates of D for each update of G (Miyato et al., 2018)
+    --loss hinge --beta1 0.5 the setting of the spectral-norm paper (hinge loss, Adam beta1 = 0.5)
     --run_dir runs/sn_seed0  save everything of this run in its own folder:
         runs/sn_seed0/config.json          all the arguments of the run
         runs/sn_seed0/log.csv              one line per epoch (losses, D scores, time)
@@ -27,7 +29,7 @@ import torchvision
 from torchvision import datasets, transforms
 
 from model import Discriminator, Generator
-from utils import (LATENT_DIM, MNIST_DIM, D_train, G_train, get_device,
+from utils import (LATENT_DIM, MNIST_DIM, D_train, D_train_hinge, G_train, G_train_hinge, get_device,
                    save_config, save_models, set_seed)
 
 # Same latent batch for every run, so grids of different methods are comparable.
@@ -43,6 +45,13 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=64, help="Size of mini-batches for SGD.")
     parser.add_argument("--gpus", type=int, default=-1, help="Number of GPUs to use (-1 for all available).")
     parser.add_argument("--spectral_norm", action="store_true", help="Spectral normalisation on D.")
+    parser.add_argument("--loss", choices=["bce", "hinge"], default="bce",
+                        help="bce: starter code (non-saturating GAN); hinge: hinge loss on the logits.")
+    parser.add_argument("--beta1", type=float, default=0.9, help="Adam beta1 (0.9 = PyTorch default, starter code).")
+    parser.add_argument("--beta2", type=float, default=0.999, help="Adam beta2.")
+    parser.add_argument("--n_dis", type=int, default=1,
+                        help="Updates of D per update of G: G is updated once every n_dis batches "
+                             "(default 1, as in the starter code).")
     parser.add_argument("--seed", type=int, default=0, help="Random seed.")
     parser.add_argument("--run_dir", type=str, default=None,
                         help="Folder for this run. Default: write to checkpoints/ like the starter code.")
@@ -116,8 +125,10 @@ def main():
         D = torch.nn.DataParallel(D)
 
     criterion = nn.BCELoss()
-    G_optimizer = optim.Adam(G.parameters(), lr=args.lr_g)
-    D_optimizer = optim.Adam(D.parameters(), lr=args.lr_d)
+    betas = (args.beta1, args.beta2)
+    G_optimizer = optim.Adam(G.parameters(), lr=args.lr_g, betas=betas)
+    D_optimizer = optim.Adam(D.parameters(), lr=args.lr_d, betas=betas)
+    hinge = args.loss == "hinge"
 
     z_fixed = torch.randn(64, LATENT_DIM, generator=torch.Generator().manual_seed(FIXED_Z_SEED)).to(device)
 
@@ -126,18 +137,23 @@ def main():
     for epoch in range(1, args.epochs + 1):
         t0 = time.time()
         sums = {"loss_D": 0.0, "loss_G": 0.0, "D_real": 0.0, "D_fake": 0.0}
-        n_batches = 0
+        n_batches, n_g = 0, 0
         for x, _ in train_loader:
             x = x.view(-1, MNIST_DIM).to(device)
-            loss_D, d_real, d_fake = D_train(x, G, D, D_optimizer, criterion, device)
-            loss_G = G_train(x, G, D, G_optimizer, criterion, device)
+            if hinge:
+                loss_D, d_real, d_fake = D_train_hinge(x, G, D, D_optimizer, device)
+            else:
+                loss_D, d_real, d_fake = D_train(x, G, D, D_optimizer, criterion, device)
             sums["loss_D"] += loss_D
-            sums["loss_G"] += loss_G
             sums["D_real"] += d_real
             sums["D_fake"] += d_fake
             n_batches += 1
+            if n_batches % args.n_dis == 0:            # G: once every n_dis batches
+                sums["loss_G"] += (G_train_hinge(x, G, D, G_optimizer, device) if hinge
+                                   else G_train(x, G, D, G_optimizer, criterion, device))
+                n_g += 1
 
-        row = {"epoch": epoch, **{k: v / n_batches for k, v in sums.items()},
+        row = {"epoch": epoch, **{k: v / (n_g if k == "loss_G" else n_batches) for k, v in sums.items()},
                "epoch_time_s": time.time() - t0}
         log_rows.append(row)
         print(f"epoch {epoch:3d} | loss_D {row['loss_D']:.3f} | loss_G {row['loss_G']:.3f} | "

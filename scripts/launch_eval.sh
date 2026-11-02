@@ -31,7 +31,7 @@ else
 fi
 if [ "${QUICK:-0}" = "1" ]; then
   TRAIN_OPTS="--every 50"
-  SAMPLE_OPTS="--configs baseline sn_ttur --samplers vanilla truncation drs --Ks 2 5 10 --psis 1.5 1.0 0.5"
+  SAMPLE_OPTS="--configs baseline sn_ttur baseline_paper sn_paper sn_paper_ndis5 --samplers vanilla truncation drs --Ks 2 5 10 --psis 1.5 1.0 0.5"
   TIME="02:00:00"
 fi
 project_dir="$(pwd)"

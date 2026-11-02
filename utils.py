@@ -38,6 +38,30 @@ def D_train(x, G, D, D_optimizer, criterion, device):
     return D_loss.item(), D_real.mean().item(), D_fake.mean().item()
 
 
+def D_train_hinge(x, G, D, D_optimizer, device):
+    """Hinge loss for D (Miyato et al., 2018; Lim & Ye, 2017), on the logits:
+        L_D = E[max(0, 1 - D(x))] + E[max(0, 1 + D(G(z)))]
+    Returns the loss and the mean sigmoid scores, logged like the BCE version."""
+    D.zero_grad()
+    logit_real = D.logits(x.to(device))
+    z = torch.randn(x.shape[0], LATENT_DIM, device=device)
+    logit_fake = D.logits(G(z))
+    D_loss = torch.relu(1 - logit_real).mean() + torch.relu(1 + logit_fake).mean()
+    D_loss.backward()
+    D_optimizer.step()
+    return D_loss.item(), torch.sigmoid(logit_real).mean().item(), torch.sigmoid(logit_fake).mean().item()
+
+
+def G_train_hinge(x, G, D, G_optimizer, device):
+    """Generator loss of the hinge GAN: L_G = -E[D(G(z))] (on the logits)."""
+    G.zero_grad()
+    z = torch.randn(x.shape[0], LATENT_DIM, device=device)
+    G_loss = -D.logits(G(z)).mean()
+    G_loss.backward()
+    G_optimizer.step()
+    return G_loss.item()
+
+
 def G_train(x, G, D, G_optimizer, criterion, device):
     #=======================Train the generator=======================#
     G.zero_grad()

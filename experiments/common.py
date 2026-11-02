@@ -16,11 +16,16 @@ def run_label(config):
     """Name of the training configuration of a run, from its config.json."""
     ttur = config.get("lr_d") != config.get("lr_g")
     sn = config.get("spectral_norm", False)
+    n_dis = config.get("n_dis", 1)
     if sn and ttur:
-        return "sn_ttur"
-    if sn:
-        return "sn"
-    return "ttur" if ttur else "baseline"
+        label = "sn_ttur"
+    elif sn:
+        label = "sn"
+    else:
+        label = "ttur" if ttur else "baseline"
+    if config.get("loss", "bce") == "hinge":
+        label += "_paper"          # hinge loss + Adam beta1 = 0.5, as in Miyato et al.
+    return label if n_dis == 1 else f"{label}_ndis{n_dis}"
 
 
 def is_finished(run_dir):

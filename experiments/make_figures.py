@@ -29,8 +29,12 @@ from common import run_label  # noqa: E402
 # ----------------------------------------------------------------------------
 # Style: one fixed colour per entity (never per rank), colour-blind safe.
 # ----------------------------------------------------------------------------
-CONFIG_COLORS = {"baseline": "#2a78d6", "sn": "#eb6834", "ttur": "#1baf7a", "sn_ttur": "#c98500"}
-CONFIG_NAMES = {"baseline": "Baseline", "sn": "Spectral norm", "ttur": "TTUR", "sn_ttur": "SN + TTUR"}
+CONFIG_COLORS = {"baseline": "#2a78d6", "sn": "#eb6834", "ttur": "#1baf7a", "sn_ttur": "#c98500",
+                 "sn_ndis5": "#6250d6", "baseline_paper": "#7b8794", "sn_paper": "#e34948",
+                 "sn_paper_ndis5": "#008300"}
+CONFIG_NAMES = {"baseline": "Baseline", "sn": "Spectral norm", "ttur": "TTUR", "sn_ttur": "SN + TTUR",
+                "sn_ndis5": "SN, 5 D steps", "baseline_paper": "Baseline (paper setting)",
+                "sn_paper": "SN (paper setting)", "sn_paper_ndis5": "SN (paper setting, 5 D steps)"}
 SAMPLER_COLORS = {"drs": "#2a78d6", "obrs": "#eb6834", "truncation": "#1baf7a"}
 SAMPLER_NAMES = {"drs": "DRS", "obrs": "OBRS", "truncation": "Truncation"}
 INK, MUTED, SOFT, GRID = "#0b0b0b", "#52514e", "#8a8984", "#e9e8e4"
@@ -102,12 +106,15 @@ def load_logs(runs_dir):
 
 
 def collapsed_runs(logs, threshold=0.01):
-    """Runs whose discriminator ends up rejecting every fake (mean D(fake) <
-    threshold at the last epoch): G no longer receives a useful gradient."""
+    """Dead runs: at the last epoch the sigmoid of D is saturated, i.e. D gives
+    the same certain answer to every fake (mean D(fake) < threshold or
+    > 1 - threshold) or rejects every real image (mean D(real) < threshold).
+    The BCE loss is then clipped and G receives no useful gradient."""
     if logs is None:
         return []
     last = logs.sort_values("epoch").groupby("run").tail(1)
-    return sorted(last[last.D_fake < threshold].run)
+    dead = (last.D_fake < threshold) | (last.D_fake > 1 - threshold) | (last.D_real < threshold)
+    return sorted(last[dead].run)
 
 
 # ----------------------------------------------------------------------------
@@ -410,7 +417,7 @@ def main():
     collapsed = collapsed_runs(logs)
     print(f"Collapsed runs: {collapsed or 'none'}")
     with open(summary, "w") as f:
-        f.write(f"Collapsed runs (final mean D(fake) < 0.01): {', '.join(collapsed) or 'none'}\n\n")
+        f.write(f"Collapsed runs (saturated D at the last epoch): {', '.join(collapsed) or 'none'}\n\n")
     if logs is not None:
         fig_training_dynamics(logs, collapsed, args.out)
 
