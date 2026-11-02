@@ -9,7 +9,7 @@ For each run:
   - the same rejection samplers with D_calibrated.pth, if
     experiments/calibrate_D.py was run for this run (ablation "D quality").
 
-Output: results/sampling_metrics.csv with FID, precision, recall, class
+Output: results/<features>/sampling_metrics.csv with FID, precision, recall, class
 statistics, acceptance rate, number of generated candidates and total time
 (calibration included). Already computed lines are skipped.
 """
@@ -32,13 +32,18 @@ def main():
                         help="Only these training configs (e.g. baseline sn). Default: all.")
     parser.add_argument("--Ks", type=float, nargs="*", default=[2, 5, 10, 20])
     parser.add_argument("--psis", type=float, nargs="*", default=[2.0, 1.5, 1.0, 0.75, 0.5])
-    parser.add_argument("--out", default="results/sampling_metrics.csv")
+    parser.add_argument("--features", default="platform", choices=["platform", "mnist"],
+                        help="platform: Inception FID + VGG-16 P/R (as the course platform); "
+                             "mnist: cheap MNIST CNN features.")
+    parser.add_argument("--out", default=None,
+                        help="Default: results/<features>/sampling_metrics.csv")
     parser.add_argument("--n", type=int, default=10000)
     parser.add_argument("--eval_seed", type=int, default=0)
     args = parser.parse_args()
+    args.out = args.out or os.path.join("results", args.features, "sampling_metrics.csv")
 
     device = get_device()
-    evaluator = Evaluator(device, data_path=os.getenv("DATA"))
+    evaluator = Evaluator(device, data_path=os.getenv("DATA"), features=args.features)
     done = {(r["run"], r["sampler"], r["D_variant"], float(r["K"]), r["psi"])
             for r in read_rows(args.out)}
 

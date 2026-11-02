@@ -114,15 +114,21 @@ scripts/            launch_training.sh, launch_eval.sh (SLURM, MesoNet)
 ./scripts/launch_training.sh                 # baseline + sn, seeds 0 1 2 (6 jobs, ~20 min each)
 CONFIGS="ttur sn_ttur" ./scripts/launch_training.sh   # optional TTUR ablation
 ./scripts/launch_eval.sh all                 # metrics of all checkpoints + sampling comparison
-python experiments/make_figures.py           # figures/ and results/summary.md
+python experiments/make_figures.py           # figures/platform/ and results/platform/summary.md
 ```
 
 ### Evaluation protocol
 
 - 10 000 generated images vs the 10 000 MNIST test images, quantised to 8 bits like PNG files.
-- Features: 128-d penultimate layer of a CNN trained on MNIST (`evaluation/metrics.py`).
-  Values are not comparable with the course platform, only between our runs.
-- Precision / recall: k-NN estimator of Kynkäänniemi et al. (2019), k = 3.
+- Default features (`--features platform`), as the course platform: FID on Inception-v3
+  features (pytorch-fid weights, 10 000 images); precision / recall (Kynkäänniemi et al., 2019)
+  and density / coverage (Naeem et al., 2020) on VGG-16 fc2 features, k = 5, 9 984 images.
+  Download the weights once on the login node:
+  `python -c "from evaluation.metrics import download_weights; download_weights()"`.
+- `--features mnist`: cheap 128-d MNIST-CNN features, k = 3, for quick checks only.
+  Results go to `results/<features>/` and figures to `figures/<features>/`: never mix them.
+- `python experiments/eval_checkpoint.py --ckpt_dir checkpoints` evaluates one checkpoint folder
+  (used to check our numbers against the leaderboard).
 - Same latent seed for every evaluation, 3 training seeds per configuration (mean ± std).
 - Rejection samplers: budget K = average number of candidates per kept image; DRS and
   OBRS are calibrated to the same acceptance rate 1/K on 10 000 calibration samples.

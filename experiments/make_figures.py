@@ -2,11 +2,11 @@
 
     python experiments/make_figures.py
 
-Inputs : runs/*/log.csv, runs/*/grids/, results/training_metrics*.csv,
-         results/sampling_metrics*.csv (each part is skipped if missing; CSVs
+Inputs : runs/*/log.csv, runs/*/grids/, results/<features>/training_metrics*.csv,
+         results/<features>/sampling_metrics*.csv (each part is skipped if missing; CSVs
          computed on different machines are merged)
-Outputs: figures/*.pdf (report) and figures/*.png (slides),
-         results/summary.md (tables, mean ± std over seeds)
+Outputs: figures/<features>/*.pdf (report) and *.png (slides),
+         results/<features>/summary.md (tables, mean ± std over seeds)
 
 Collapsed runs (D rejects every fake at the end of training) are detected from
 log.csv. They are EXCLUDED from averaged metrics (a dead run averaged with
@@ -34,6 +34,8 @@ CONFIG_NAMES = {"baseline": "Baseline", "sn": "Spectral norm", "ttur": "TTUR", "
 SAMPLER_COLORS = {"drs": "#2a78d6", "obrs": "#eb6834", "truncation": "#1baf7a"}
 SAMPLER_NAMES = {"drs": "DRS", "obrs": "OBRS", "truncation": "Truncation"}
 INK, MUTED, SOFT, GRID = "#0b0b0b", "#52514e", "#8a8984", "#e9e8e4"
+HEAD = {"fid": "FID ↓", "precision": "Precision ↑", "recall": "Recall ↑", "density": "Density ↑",
+        "coverage": "Coverage ↑", "class_entropy": "Class entropy ↑"}
 METRICS = [("fid", "FID", "lower is better"), ("precision", "Precision", "quality"),
            ("recall", "Recall", "diversity")]
 
@@ -207,15 +209,15 @@ def fig_training_dynamics(logs, collapsed, out):
 
 def table_training(df, logs, collapsed, path):
     last = df[df.epoch == df.epoch.max()]
-    cols = ["fid", "precision", "recall", "class_entropy"]
+    cols = [c for c in ["fid", "precision", "recall", "density", "coverage", "class_entropy"] if c in df]
     out = []
     for title, d in (("converged runs only", last[~last.run.isin(collapsed)]), ("all runs", last)):
         if title == "all runs" and not collapsed:
             continue
         stats = mean_std(d, ["config"], cols)
         out += [f"## Training lever, {title} (epoch {df.epoch.max()}, vanilla sampling, mean ± std)", "",
-                "| Config | Runs | Collapsed | FID ↓ | Precision ↑ | Recall ↑ | Class entropy ↑ | Train time / run |",
-                "|---|---|---|---|---|---|---|---|"]
+                "| Config | Runs | Collapsed | " + " | ".join(HEAD[c] for c in cols) + " | Train time / run |",
+                "|---|---|---|" + "---|" * len(cols) + "---|"]
         for cfg in configs_in(d):
             s = stats[stats.config == cfg].iloc[0]
             n = d[d.config == cfg].run.nunique()
@@ -225,9 +227,8 @@ def table_training(df, logs, collapsed, path):
             if logs is not None:
                 per_run = logs[logs.config == cfg].groupby("run").epoch_time_s.sum().mean()
                 t = f"{per_run / 60:.1f} min"
-            out.append(f"| {CONFIG_NAMES[cfg]} | {n} | {n_dead}/{len(runs_cfg)} | {fmt(s.fid_mean, s.fid_std, 1)} | "
-                       f"{fmt(s.precision_mean, s.precision_std, 3)} | {fmt(s.recall_mean, s.recall_std, 3)} | "
-                       f"{fmt(s.class_entropy_mean, s.class_entropy_std, 3)} | {t} |")
+            vals = " | ".join(fmt(s[f"{c}_mean"], s[f"{c}_std"], 1 if c == "fid" else 3) for c in cols)
+            out.append(f"| {CONFIG_NAMES[cfg]} | {n} | {n_dead}/{len(runs_cfg)} | {vals} | {t} |")
         out.append("")
     with open(path, "a") as f:
         f.write("\n".join(out) + "\n")
@@ -335,16 +336,15 @@ def fig_pr_plane(df, cfg, out):
 
 
 def table_sampling(df, path):
-    cols = ["fid", "precision", "recall", "class_entropy", "acceptance_rate", "time_s"]
-    stats = mean_std(df, ["config", "sampler", "D_variant", "K", "psi"], cols)
+    cols = [c for c in ["fid", "precision", "recall", "density", "coverage"] if c in df]
+    stats = mean_std(df, ["config", "sampler", "D_variant", "K", "psi"], cols + ["acceptance_rate", "time_s"])
     lines = ["## Inference lever, converged runs only (final checkpoints, mean ± std over seeds)", "",
-             "| Generator | Sampler | D | K | ψ | FID ↓ | Precision ↑ | Recall ↑ | Acceptance | Time (s) |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
+             "| Generator | Sampler | D | K | ψ | " + " | ".join(HEAD[c] for c in cols) + " | Acceptance | Time (s) |",
+             "|---|---|---|---|---|" + "---|" * len(cols) + "---|---|"]
     for _, s in stats.iterrows():
+        vals = " | ".join(fmt(s[f"{c}_mean"], s[f"{c}_std"], 1 if c == "fid" else 3) for c in cols)
         lines.append(f"| {CONFIG_NAMES.get(s.config, s.config)} | {s.sampler} | {s.D_variant} | {s.K:g} | "
-                     f"{s.psi} | {fmt(s.fid_mean, s.fid_std, 1)} | "
-                     f"{fmt(s.precision_mean, s.precision_std, 3)} | {fmt(s.recall_mean, s.recall_std, 3)} | "
-                     f"{s.acceptance_rate_mean:.3f} | {s.time_s_mean:.1f} |")
+                     f"{s.psi} | {vals} | {s.acceptance_rate_mean:.3f} | {s.time_s_mean:.1f} |")
     with open(path, "a") as f:
         f.write("\n".join(lines) + "\n\n")
 
@@ -395,9 +395,13 @@ def read_all(pattern, **kwargs):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs_dir", default="runs")
-    parser.add_argument("--results_dir", default="results")
-    parser.add_argument("--out", default="figures")
+    parser.add_argument("--features", default="platform", choices=["platform", "mnist"],
+                        help="Which evaluation to plot (never mix the two feature spaces).")
+    parser.add_argument("--results_dir", default=None, help="Default: results/<features>")
+    parser.add_argument("--out", default=None, help="Default: figures/<features>")
     args = parser.parse_args()
+    args.results_dir = args.results_dir or os.path.join("results", args.features)
+    args.out = args.out or os.path.join("figures", args.features)
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.results_dir, exist_ok=True)
     summary = os.path.join(args.results_dir, "summary.md")

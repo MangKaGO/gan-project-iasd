@@ -14,7 +14,7 @@ import argparse
 import os
 import time
 
-from common import run_info
+from common import is_finished, run_info
 
 import torch  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
@@ -31,8 +31,15 @@ def main():
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--force", action="store_true", help="Recalibrate even if done already.")
     args = parser.parse_args()
 
+    if not is_finished(args.run_dir):
+        print(f"Skipping {args.run_dir}: training not finished.")
+        return
+    if os.path.exists(os.path.join(args.run_dir, "checkpoints", "D_calibrated.pth")) and not args.force:
+        print(f"Skipping {args.run_dir}: D_calibrated.pth already exists (use --force to redo).")
+        return
     set_seed(args.seed)
     device = get_device()
     ckpt = os.path.join(args.run_dir, "checkpoints")
