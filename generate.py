@@ -1,57 +1,62 @@
-import torch 
-import torchvision
-import os
+"""Generate exactly 10 000 MNIST images (28x28 PNG) in samples/.
+
+Platform contract (unchanged):
+    python generate.py --batch_size 256
+loads the generator from checkpoints/ and writes samples/0.png ... samples/9999.png.
+
+The sampling method is read from checkpoints/config.json (key "sampling"), so the
+evaluation platform uses the method we choose without any extra argument, e.g.
+    "sampling": {"method": "drs", "K": 5}
+Without that key, the starter behaviour (vanilla sampling) is used.
+Any value can be overridden on the command line (--method, --K, --psi, --rescale).
+"""
 import argparse
+import os
 
+import torch
+import torchvision
 
-from model import Generator
-from utils import load_model
+from sampling import sample
+from utils import get_device, load_config, load_discriminator, load_generator, set_seed
+
+N_SAMPLES = 10000
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Generate Normalizing Flow.')
-    parser.add_argument("--batch_size", type=int, default=2048,
-                      help="The batch size to use for training.")
+    parser = argparse.ArgumentParser(description='Generate MNIST samples with the trained GAN.')
+    parser.add_argument("--batch_size", type=int, default=2048, help="Batch size for generation.")
+    parser.add_argument("--ckpt_dir", type=str, default="checkpoints")
+    parser.add_argument("--out_dir", type=str, default="samples")
+    parser.add_argument("--method", type=str, default=None,
+                        choices=["vanilla", "truncation", "drs", "obrs"])
+    parser.add_argument("--K", type=float, default=None, help="Sampling budget for drs / obrs.")
+    parser.add_argument("--psi", type=float, default=None, help="Truncation threshold.")
+    parser.add_argument("--rescale", action="store_true", default=None,
+                        help="Save (x+1)/2 instead of clamping x to [0, 1].")
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
+    device = get_device()
+    print(f"Using device: {device}")
+    set_seed(args.seed)
 
-
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-        print(f"Using device: CUDA")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")
-        print(f"Using device: MPS (Apple Metal)")
-    else:
-        device = torch.device("cpu")
-        print(f"Using device: CPU")
+    # Command-line values override the ones stored in checkpoints/config.json.
+    cfg = load_config(args.ckpt_dir).get("sampling", {})
+    method = args.method or cfg.get("method", "vanilla")
+    K = args.K if args.K is not None else cfg.get("K", 1.0)
+    psi = args.psi if args.psi is not None else cfg.get("psi")
+    rescale = args.rescale if args.rescale is not None else cfg.get("rescale", False)
+    print(f"Sampling method: {method} (K={K}, psi={psi}, rescale={rescale})")
 
     print('Model Loading...')
-    # Model Pipeline
-    mnist_dim = 784
-
-    model = Generator(g_output_dim=mnist_dim).to(device)
-    model = load_model(model, 'checkpoints', device)
-    if torch.cuda.device_count() > 1:
-        model = torch.nn.DataParallel(model)
-    model.eval()
-
+    G = load_generator(args.ckpt_dir, device)
+    D = load_discriminator(args.ckpt_dir, device) if method in ("drs", "obrs") else None
     print('Model loaded.')
 
-
-
     print('Start Generating')
-    os.makedirs('samples', exist_ok=True)
-
-    n_samples = 0
-    with torch.no_grad():
-        while n_samples<10000:
-            z = torch.randn(args.batch_size, 100).to(device)
-            x = model(z)
-            x = x.reshape(args.batch_size, 28, 28)
-            for k in range(x.shape[0]):
-                if n_samples<10000:
-                    torchvision.utils.save_image(x[k:k+1], os.path.join('samples', f'{n_samples}.png'))         
-                    n_samples += 1
-
-
-    
+    images, stats = sample(G, N_SAMPLES, device, method=method, D=D, K=K, psi=psi,
+                           batch_size=args.batch_size, rescale=rescale)
+    os.makedirs(args.out_dir, exist_ok=True)
+    for k in range(N_SAMPLES):
+        torchvision.utils.save_image(images[k], os.path.join(args.out_dir, f'{k}.png'))
+    print(f"Saved {N_SAMPLES} images to {args.out_dir}/ | "
+          f"acceptance rate {stats['acceptance_rate']:.3f} | time {stats['time_s']:.1f}s")
