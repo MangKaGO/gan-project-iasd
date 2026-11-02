@@ -4,4 +4,3 @@ samples/
 outputs/
 runs/
 __pycache__/
-evaluation/mnist_cnn.pth
