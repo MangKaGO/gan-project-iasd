@@ -231,6 +231,15 @@ def fig_grids(runs_dir, out, seed=0):
     save(fig, "grids", out)
 
 
+def read_all(pattern, **kwargs):
+    """Concatenate every CSV matching pattern (None if there is none)."""
+    paths = sorted(glob.glob(pattern))
+    if not paths:
+        return None
+    df = pd.concat([pd.read_csv(p, **kwargs) for p in paths], ignore_index=True)
+    return df.drop_duplicates(subset=[c for c in df.columns if c not in ("time_s",)])
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs_dir", default="runs")
@@ -245,15 +254,15 @@ def main():
     logs = fig_training_dynamics(args.runs_dir, args.out)
     fig_grids(args.runs_dir, args.out)
 
-    train_csv = os.path.join(args.results_dir, "training_metrics.csv")
-    if os.path.exists(train_csv):
-        df = pd.read_csv(train_csv)
+    # Every results/training_metrics*.csv is read, so that results computed on
+    # different machines (e.g. training_metrics_<name>.csv) are merged.
+    df = read_all(os.path.join(args.results_dir, "training_metrics*.csv"))
+    if df is not None:
         fig_training_curves(df, args.out)
         table_training(df, logs, summary)
 
-    sampling_csv = os.path.join(args.results_dir, "sampling_metrics.csv")
-    if os.path.exists(sampling_csv):
-        df = pd.read_csv(sampling_csv, keep_default_na=False)
+    df = read_all(os.path.join(args.results_dir, "sampling_metrics*.csv"), keep_default_na=False)
+    if df is not None:
         df["K"] = df["K"].astype(float)
         for cfg in configs_in(df):
             fig_sampling_vs_K(df, cfg, args.out)
