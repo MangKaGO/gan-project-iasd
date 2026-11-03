@@ -8,12 +8,15 @@
 #     GPU=0 ./scripts/launch_eval.sh all    # CPU only: slower, but no wait for a GPU
 #     FEATURES=mnist ./scripts/launch_eval.sh all   # cheap MNIST-CNN metrics instead of
 #                                                    # the platform ones (Inception / VGG-16)
+#     RESCALE=1 QUICK=1 ./scripts/launch_eval.sh all   # images saved as (x+1)/2 instead of
+#                                           # clamped; results in results/<features>_rescale/
 #     QUICK=1 ./scripts/launch_eval.sh all  # reduced plan (~40 min on GPU): epochs 50 and 100,
 #                                           # sampling on baseline and sn_ttur only, DRS and
 #                                           # truncation, K in {2, 5, 10}
 # Results are appended to results/*.csv; finished evaluations are skipped.
 
 STAGE=${1:-all}
+USER_TIME=${TIME}                           # a TIME given on the command line always wins
 GPU=${GPU:-1}
 FEATURES=${FEATURES:-platform}
 if [ "${GPU}" = "0" ]; then
@@ -31,8 +34,11 @@ else
 fi
 if [ "${QUICK:-0}" = "1" ]; then
   TRAIN_OPTS="--every 50"
-  SAMPLE_OPTS="--configs baseline sn_ttur baseline_paper sn_paper sn_paper_ndis5 --samplers vanilla truncation drs --Ks 2 5 10 --psis 1.5 1.0 0.5"
-  TIME="02:00:00"
+  SAMPLE_OPTS="--configs baseline baseline_paper sn_paper sn_paper_ndis5 baseline_paper_ep400 --samplers vanilla truncation drs --Ks 2 5 10 --psis 1.5 1.0 0.5"
+  TIME=${USER_TIME:-"02:00:00"}
+fi
+if [ "${RESCALE:-0}" = "1" ]; then
+  TRAIN_OPTS="${TRAIN_OPTS} --rescale"; SAMPLE_OPTS="${SAMPLE_OPTS} --rescale"; TAG="_rescale"
 fi
 project_dir="$(pwd)"
 mkdir -p "${project_dir}/outputs" "${project_dir}/results"
@@ -53,7 +59,7 @@ ${RES}
 #SBATCH --mem=32G
 #SBATCH --time=${TIME}
 #SBATCH --account=m25146
-#SBATCH --job-name=eval_${STAGE}_${FEATURES}
+#SBATCH --job-name=eval_${STAGE}_${FEATURES}${TAG}
 #SBATCH --output=${project_dir}/outputs/%x_%j.out
 #SBATCH --error=${project_dir}/outputs/%x_%j.err
 set -e

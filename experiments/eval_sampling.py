@@ -36,14 +36,19 @@ def main():
                         help="platform: Inception FID + VGG-16 P/R (as the course platform); "
                              "mnist: cheap MNIST CNN features.")
     parser.add_argument("--out", default=None,
-                        help="Default: results/<features>/sampling_metrics.csv")
+                        help="Default: results/<features>[_rescale]/sampling_metrics.csv")
+    parser.add_argument("--rescale", action="store_true",
+                        help="Save every image as (x+1)/2, the inverse of the training normalisation, "
+                             "instead of clamping x to [0, 1] (starter generate.py). Results go to "
+                             "results/<features>_rescale/.")
     parser.add_argument("--n", type=int, default=10000)
     parser.add_argument("--eval_seed", type=int, default=0)
     parser.add_argument("--samplers", nargs="*",
                         default=["vanilla", "vanilla_rescale", "truncation", "drs", "obrs"],
                         help="Which samplers to evaluate.")
     args = parser.parse_args()
-    args.out = args.out or os.path.join("results", args.features, "sampling_metrics.csv")
+    folder = args.features + ("_rescale" if args.rescale else "")
+    args.out = args.out or os.path.join("results", folder, "sampling_metrics.csv")
 
     device = get_device()
     evaluator = Evaluator(device, data_path=os.getenv("DATA"), features=args.features)
@@ -75,7 +80,7 @@ def main():
             set_seed(args.eval_seed)
             with torch.no_grad():
                 images, stats = sample(G, args.n, device, method=method, D=D, K=K, psi=psi,
-                                       rescale=rescale)
+                                       rescale=rescale or args.rescale)
             metrics = evaluator(images)
             row = {**info, "sampler": sampler, "D_variant": d_variant, "K": K,
                    "psi": "" if psi is None else psi,

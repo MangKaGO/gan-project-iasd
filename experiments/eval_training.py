@@ -32,8 +32,12 @@ def main():
     parser.add_argument("--eval_seed", type=int, default=0, help="Seed of the latent samples.")
     parser.add_argument("--every", type=int, default=1,
                         help="Only evaluate epochs that are multiples of this (e.g. 50: epochs 50 and 100).")
+    parser.add_argument("--rescale", action="store_true",
+                        help="Save images as (x+1)/2 instead of clamping to [0, 1]; "
+                             "results go to results/<features>_rescale/.")
     args = parser.parse_args()
-    args.out = args.out or os.path.join("results", args.features, "training_metrics.csv")
+    folder = args.features + ("_rescale" if args.rescale else "")
+    args.out = args.out or os.path.join("results", folder, "training_metrics.csv")
 
     device = get_device()
     evaluator = Evaluator(device, data_path=os.getenv("DATA"), features=args.features)
@@ -49,7 +53,7 @@ def main():
             G = load_generator(os.path.dirname(path), device, os.path.basename(path))
             set_seed(args.eval_seed)
             with torch.no_grad():
-                images, _ = sample(G, args.n, device, method="vanilla")
+                images, _ = sample(G, args.n, device, method="vanilla", rescale=args.rescale)
             metrics = evaluator(images)
             row = {**info, "epoch": epoch, **{k: round(v, 5) for k, v in metrics.items()}}
             append_row(args.out, row)
