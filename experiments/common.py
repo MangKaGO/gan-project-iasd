@@ -24,8 +24,18 @@ def run_label(config):
     else:
         label = "ttur" if ttur else "baseline"
     if config.get("loss", "bce") == "hinge":
-        label += "_paper"          # hinge loss + Adam beta1 = 0.5, as in Miyato et al.
-    return label if n_dis == 1 else f"{label}_ndis{n_dis}"
+        # hinge loss + Adam beta1 = 0.5 (Miyato et al.). "_paperA": exact setting A of their
+        # Table 1 (lr 1e-4, beta1 0.5, beta2 0.9, n_dis 5); "_paper": lr 2e-4, beta2 0.999.
+        setting_a = (abs(config.get("lr_g", 2e-4) - 1e-4) < 1e-12
+                     and abs(config.get("beta2", 0.999) - 0.9) < 1e-12)
+        label += "_paperA" if setting_a else "_paper"
+    label = label if n_dis == 1 else f"{label}_ndis{n_dis}"
+    # Longer trainings get their own label, so they are never averaged with the
+    # standard runs (100 epochs, or 500 epochs with 5 D steps per G step).
+    epochs = config.get("epochs", 100)
+    if epochs != 100 * n_dis:
+        label += f"_ep{epochs}"
+    return label
 
 
 def is_finished(run_dir):
