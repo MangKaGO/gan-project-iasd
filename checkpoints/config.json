@@ -14,8 +14,8 @@
   "run_dir": "runs/sn_paper_ndis5_seed1",
   "save_every": 50,
   "sampling": {
-    "method": "truncation",
-    "psi": 1.5,
+    "method": "drs",
+    "K": 5,
     "rescale": true
   }
 }
