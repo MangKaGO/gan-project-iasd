@@ -34,7 +34,7 @@ else
 fi
 if [ "${QUICK:-0}" = "1" ]; then
   TRAIN_OPTS="--every 50"
-  SAMPLE_OPTS="--configs baseline baseline_paper sn_paper sn_paper_ndis5 baseline_paper_ep400 sn_paperA_ndis5 baseline_paperA_ndis5 --samplers vanilla truncation drs --Ks 2 5 10 --psis 1.5 1.0 0.5"
+  SAMPLE_OPTS="--configs baseline baseline_paper sn_paper sn_paper_ndis5 baseline_paper_ndis5 baseline_paper_ep500 sn_paperA_ndis5 baseline_paperA_ndis5 --samplers vanilla truncation drs --Ks 2 5 10 --psis 1.5 1.0 0.5"
   TIME=${USER_TIME:-"02:00:00"}
 fi
 if [ "${RESCALE:-0}" = "1" ]; then
