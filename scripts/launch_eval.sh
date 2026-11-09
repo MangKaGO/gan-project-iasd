@@ -3,6 +3,9 @@
 # Run from the repository root:
 #     ./scripts/launch_eval.sh training     # metrics of every checkpoint (vanilla sampling)
 #     ./scripts/launch_eval.sh calibrate    # D_calibrated.pth for every run (ablation)
+#     ./scripts/launch_eval.sh scratch      # D_scratch.pth: a NEW D trained from scratch against
+#                                           # each frozen G (runs of SCRATCH_CONFIGS only), then
+#                                           # DRS with it: RESCALE=1 bash scripts/launch_eval.sh scratch
 #     ./scripts/launch_eval.sh sampling     # vanilla / truncation / DRS / OBRS on final checkpoints
 #     ./scripts/launch_eval.sh all          # the three, in this order
 #     GPU=0 ./scripts/launch_eval.sh all    # CPU only: slower, but no wait for a GPU
@@ -38,17 +41,22 @@ if [ "${QUICK:-0}" = "1" ]; then
   TIME=${USER_TIME:-"02:00:00"}
 fi
 if [ "${RESCALE:-0}" = "1" ]; then
-  TRAIN_OPTS="${TRAIN_OPTS} --rescale"; SAMPLE_OPTS="${SAMPLE_OPTS} --rescale"; TAG="_rescale"
+  TRAIN_OPTS="${TRAIN_OPTS} --rescale"; SAMPLE_OPTS="${SAMPLE_OPTS} --rescale"; TAG="_rescale"; RESC="--rescale"
 fi
+# Runs that get a discriminator trained from scratch (~5 min per run on GPU).
+SCRATCH_CONFIGS=${SCRATCH_CONFIGS:-"baseline baseline_paper sn_paper_ndis5"}
+scratch_runs=""
+for c in ${SCRATCH_CONFIGS}; do scratch_runs="${scratch_runs} runs/${c}_seed*/"; done
 project_dir="$(pwd)"
 mkdir -p "${project_dir}/outputs" "${project_dir}/results"
 
 case ${STAGE} in
   training)  cmd="python experiments/eval_training.py --features ${FEATURES} ${TRAIN_OPTS}" ;;
   calibrate) cmd="for r in runs/*/; do python experiments/calibrate_D.py --run_dir \$r; done" ;;
+  scratch)   cmd="for r in ${scratch_runs}; do python experiments/calibrate_D.py --run_dir \$r --from_scratch; done && python experiments/eval_sampling.py --features ${FEATURES} --configs ${SCRATCH_CONFIGS} --samplers vanilla drs --Ks 2 5 10 ${RESC}" ;;
   sampling)  cmd="python experiments/eval_sampling.py --features ${FEATURES} ${SAMPLE_OPTS}" ;;
   all)       cmd="python experiments/eval_training.py --features ${FEATURES} ${TRAIN_OPTS} && for r in runs/*/; do python experiments/calibrate_D.py --run_dir \$r; done && python experiments/eval_sampling.py --features ${FEATURES} ${SAMPLE_OPTS}" ;;
-  *) echo "Usage: $0 [training|calibrate|sampling|all]"; exit 1 ;;
+  *) echo "Usage: $0 [training|calibrate|scratch|sampling|all]"; exit 1 ;;
 esac
 
 sbatch <<EOT

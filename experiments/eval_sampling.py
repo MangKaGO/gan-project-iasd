@@ -65,17 +65,20 @@ def main():
         # (sampler, D file, K, psi, rescale)
         jobs = [("vanilla", None, 1.0, None, False), ("vanilla_rescale", None, 1.0, None, True)]
         jobs += [("truncation", None, 1.0, psi, False) for psi in args.psis]
-        for d_file in ("D.pth", "D_calibrated.pth"):
+        for d_file in ("D.pth", "D_calibrated.pth", "D_scratch.pth"):
             if os.path.exists(os.path.join(ckpt, d_file)):
                 jobs += [(m, d_file, K, None, False) for m in ("drs", "obrs") for K in args.Ks]
 
         jobs = [j for j in jobs if j[0] in args.samplers]
         for sampler, d_file, K, psi, rescale in jobs:
-            d_variant = {None: "none", "D.pth": "final", "D_calibrated.pth": "calibrated"}[d_file]
+            d_variant = {None: "none", "D.pth": "final", "D_calibrated.pth": "calibrated",
+                         "D_scratch.pth": "scratch"}[d_file]
             key = (info["run"], sampler, d_variant, float(K), "" if psi is None else str(psi))
             if key in done:
                 continue
-            D = load_discriminator(ckpt, device, d_file) if d_file else None
+            # D_scratch is always a plain D (no SN), whatever the training config of the run
+            sn = False if d_file == "D_scratch.pth" else None
+            D = load_discriminator(ckpt, device, d_file, spectral_norm=sn) if d_file else None
             method = "vanilla" if sampler == "vanilla_rescale" else sampler
             set_seed(args.eval_seed)
             with torch.no_grad():
