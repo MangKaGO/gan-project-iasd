@@ -1,0 +1,16 @@
+{
+  "epochs": 500,
+  "lr": 0.0002,
+  "lr_g": 0.0002,
+  "lr_d": 0.0002,
+  "batch_size": 64,
+  "gpus": 1,
+  "spectral_norm": false,
+  "loss": "bce",
+  "beta1": 0.9,
+  "beta2": 0.999,
+  "n_dis": 5,
+  "seed": 2,
+  "run_dir": "runs/baseline_ndis5_seed2",
+  "save_every": 50
+}

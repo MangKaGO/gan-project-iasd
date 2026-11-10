@@ -27,6 +27,7 @@ for cfg in ${CONFIGS}; do
   epochs=${EPOCHS}
   case ${cfg} in
     baseline) opts="" ;;
+    baseline_ndis5) opts="--n_dis 5 --save_every 50"; epochs=$((EPOCHS * 5)) ;;
     sn)       opts="--spectral_norm" ;;
     ttur)     opts="--lr_g 0.0001 --lr_d 0.0004" ;;
     sn_ttur)  opts="--spectral_norm --lr_g 0.0001 --lr_d 0.0004" ;;
